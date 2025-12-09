@@ -1,10 +1,6 @@
 {
   "nameAPP": "selenium-manager",
-  "port": [
-    "4444:4444",
-    "7900:7900",
-    "9000:9000"
-  ],
+  "port": ["4444:4444", "7900:7900", "9000:9000"],
   "network": "app-network",
   "configContainer": {
     "cpus": "0.8",
