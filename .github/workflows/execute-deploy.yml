@@ -51,10 +51,13 @@ jobs:
           
           sudo apt-get update && sudo apt-get install -y jq
           APP_NAME=$(jq -r '.nameAPP' "$CONFIG_PATH")
-          APP_PORT=$(jq -r '.port' "$CONFIG_PATH")
+          APP_PORT=$(jq -r '.port[] | "-p \(. )"' "$CONFIG_PATH" | xargs)
           
           echo "APP_NAME=${APP_NAME}" >> $GITHUB_OUTPUT
           echo "APP_PORT=${APP_PORT}" >> $GITHUB_OUTPUT
+
+          echo "APP_NAME=$APP_NAME"
+          echo "APP_PORT=$APP_PORT"
 
       - name: Replace Secrets in JSON Config
         id: replace_secrets
@@ -116,7 +119,6 @@ jobs:
             CPUS=$(echo "$JSON_CONFIG" | jq -r '.configContainer.cpus // "1.0"')
             MEMORY=$(echo "$JSON_CONFIG" | jq -r '.configContainer.memory // "800m"')
             MEMORY_SWAP=$(echo "$JSON_CONFIG" | jq -r '.configContainer.memorySwap // "1G"')
-            APP_PORT=$(echo "$JSON_CONFIG" | jq -r '.port[]? | "-p \(. )"' | xargs)
 
             TMP_DIR=$(mktemp -d)
             ENV_FILE="$TMP_DIR/$APP_NAME/${{ github.run_number }}/.env"
