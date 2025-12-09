@@ -39,53 +39,49 @@ jobs:
       APP_NAME: ${{ steps.json_config.outputs.APP_NAME }}
       APP_PORT: ${{ steps.json_config.outputs.APP_PORT }}
     steps:
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Read config.json for the selected environment
+      - name: Read config.json
         id: json_config
         run: |
           ENV_NAME=${{ inputs.environment }}
           CONFIG_PATH="infra/$ENV_NAME/config.json"
-          
+
           sudo apt-get update && sudo apt-get install -y jq
           APP_NAME=$(jq -r '.nameAPP' "$CONFIG_PATH")
           APP_PORT=$(jq -r '.port[] | "-p \(. )"' "$CONFIG_PATH" | xargs)
-          
-          echo "APP_NAME=${APP_NAME}" >> $GITHUB_OUTPUT
-          echo "APP_PORT=${APP_PORT}" >> $GITHUB_OUTPUT
 
-          echo "APP_NAME=$APP_NAME"
-          echo "APP_PORT=$APP_PORT"
+          echo "APP_NAME=$APP_NAME" >> $GITHUB_OUTPUT
+          echo "APP_PORT=$APP_PORT" >> $GITHUB_OUTPUT
 
-      - name: Replace Secrets in JSON Config
+      - name: Replace Secrets
         id: replace_secrets
         env:
           ENV_NAME: ${{ inputs.environment }}
         run: |
-          CONFIG_PATH="infra/$ENV_NAME/config.json"
-          JSON_CONFIG=$(cat "$CONFIG_PATH")
+          JSON_CONFIG=$(cat infra/$ENV_NAME/config.json)
           JSON_B64=$(echo "$JSON_CONFIG" | base64 -w0 2>/dev/null || echo "$JSON_CONFIG" | base64)
           echo "JSON_B64=$JSON_B64" >> $GITHUB_OUTPUT
 
-      - name: Set and Update Application Version
+      - name: Set Version
         id: versioning
         run: |
           NEW_VERSION="1.0.${{ github.run_number }}"
-          echo "Nova versão da aplicação: $NEW_VERSION"
-          echo "APP_VERSION=${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "APP_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
+      - name: Login DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.docker-user }}
           password: ${{ secrets.docker-pass }}
 
-      - name: Build and push multi-arch image
+      - name: Build and push image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -97,14 +93,12 @@ jobs:
             ${{ secrets.docker-repo }}/${{ steps.json_config.outputs.APP_NAME }}:latest
 
   deploy:
-    name: Deploy da aplicação
+    name: Deploy + Healthcheck
     runs-on: ubuntu-latest
     needs: [ build_and_publish ]
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
 
-      - name: Execute deploy
+    steps:
+      - name: Deploy & Healthcheck on VPS
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.vps-host }}
@@ -112,83 +106,85 @@ jobs:
           key: ${{ secrets.vps-ssh-private-key }}
           script: |
             set -euo pipefail
-            
+
             APP_VERSION="${{ needs.build_and_publish.outputs.APP_VERSION }}"
             JSON_B64='${{ needs.build_and_publish.outputs.JSON_B64 }}'
             APP_NAME="${{ needs.build_and_publish.outputs.APP_NAME }}"
             APP_PORT="${{ needs.build_and_publish.outputs.APP_PORT }}"
-            
-            REPO_DOCKER="${{ secrets.docker-repo }}"            
+            REPO_DOCKER="${{ secrets.docker-repo }}"
             IMAGE_NAME="$REPO_DOCKER/$APP_NAME:$APP_VERSION"
-            
-            if ! command -v jq &> /dev/null; then
-                sudo apt-get update && sudo apt-get install -y jq
-            fi
-            
+
+            echo "📄 Decodificando config.json"
             JSON_CONFIG=$(echo "$JSON_B64" | base64 -d)
-            
-            APP_NETWORK=$(echo "$JSON_CONFIG" | jq -r '.network // "app-network"')
-            CPUS=$(echo "$JSON_CONFIG" | jq -r '.configContainer.cpus // "1.0"')
-            MEMORY=$(echo "$JSON_CONFIG" | jq -r '.configContainer.memory // "800m"')
-            MEMORY_SWAP=$(echo "$JSON_CONFIG" | jq -r '.configContainer.memorySwap // "1G"')
 
-            # --------------------------------------
-            # Criar arquivo .env
-            # --------------------------------------
+            # ----- Preparar env -----
             TMP_DIR=$(mktemp -d)
-            ENV_FILE="$TMP_DIR/$APP_NAME/${{ github.run_number }}/.env"
+            ENV_FILE="$TMP_DIR/$APP_NAME/.env"
             mkdir -p "$(dirname "$ENV_FILE")"
-
             echo "$JSON_CONFIG" | jq -r '.environment[] | "\(.name)=\(.value)"' > "$ENV_FILE"
 
-            # --------------------------------------
-            # Remover container (independente da versão)
-            # --------------------------------------
-            echo "🔍 Verificando containers antigos..."
-            EXISTING_CONTAINER=$(docker ps -aq -f name="^${APP_NAME}$" || true)
-
-            if [ -n "$EXISTING_CONTAINER" ]; then
-                echo "🛑 Parando container antigo..."
+            # ----- Remover container antigo -----
+            if docker ps -aq -f name="^${APP_NAME}$" >/dev/null; then
                 docker stop "$APP_NAME" || true
-                echo "🗑 Removendo container antigo..."
                 docker rm "$APP_NAME" || true
-            else
-                echo "✔ Nenhum container existente encontrado."
             fi
 
-            # --------------------------------------
-            # Remover imagens antigas (todas as versões)
-            # --------------------------------------
-            echo "🔍 Removendo imagens antigas..."
-            OLD_IMAGES=$(docker images -q "$REPO_DOCKER/$APP_NAME" || true)
+            # ----- Remover imagens antigas -----
+            OLD=$(docker images -q "$REPO_DOCKER/$APP_NAME" || true)
+            [ -n "$OLD" ] && docker rmi -f $OLD || true
 
-            if [ -n "$OLD_IMAGES" ]; then
-                echo "🗑 Removendo imagens:"
-                echo "$OLD_IMAGES"
-                docker rmi -f $OLD_IMAGES || true
-            else
-                echo "✔ Nenhuma imagem antiga encontrada."
-            fi
-
-            # --------------------------------------
-            # Criar novo container
-            # --------------------------------------
-            
-            echo "🚀 Subindo novo container..."
+            # ----- Criar novo container -----
+            echo "🚀 Subindo container..."
             docker run -d \
               $APP_PORT \
               --name "$APP_NAME" \
-              --network "$APP_NETWORK" \
+              --network "$(echo "$JSON_CONFIG" | jq -r '.network')" \
               --restart always \
-              --cpus="$CPUS" \
-              --memory="$MEMORY" \
-              --memory-swap="$MEMORY_SWAP" \
               --env-file "$ENV_FILE" \
               "$IMAGE_NAME"
-            
+
             rm -rf "$TMP_DIR"
 
-      - name: Validar Selenium Manager
-        uses: ./.github/actions/selenium-healthcheck
-        with:
-          base_url: "http://localhost:10000"
+            # =====================================================
+            #              HEALTHCHECK (executado no VPS)
+            # =====================================================
+
+            BASE_URL="http://localhost:10000"
+
+            sleep 5
+            echo "📡 Testando /status..."
+
+            STATUS=$(curl -s -w "\n%{http_code}" "$BASE_URL/status" || true)
+            BODY=$(echo "$STATUS" | head -n1)
+            CODE=$(echo "$STATUS" | tail -n1)
+
+            if [ "$CODE" -ne 200 ]; then
+              echo "❌ /status falhou"
+              exit 1
+            fi
+
+            OK_VALUE=$(echo "$BODY" | jq -r '.ok')
+
+            if [ "$OK_VALUE" != "true" ]; then
+              echo "⚠️ Selenium não rodando — chamando /start"
+              START=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/start")
+              S_BODY=$(echo "$START" | head -n1)
+              S_CODE=$(echo "$START" | tail -n1)
+
+              if [ "$S_CODE" -ne 200 ] || [ "$(echo "$S_BODY" | jq -r '.ok')" != "true" ]; then
+                echo "❌ /start falhou"
+                exit 1
+              fi
+            fi
+
+            echo "🛑 Chamando /stop..."
+            STOP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/stop")
+            ST_BODY=$(echo "$STOP" | head -n1)
+            ST_CODE=$(echo "$STOP" | tail -n1)
+
+            if [ "$ST_CODE" -ne 200 ] || [ "$(echo "$ST_BODY" | jq -r '.ok')" != "true" ]; then
+              echo "❌ /stop falhou"
+              exit 1
+            fi
+
+            echo "🎉 HEALTHCHECK OK — Selenium Manager validado com sucesso!"
