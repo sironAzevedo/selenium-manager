@@ -1,5 +1,5 @@
 # Selenium Standalone Chrome (base)
-FROM selenium/standalone-chrome:4.10.0
+FROM selenium/standalone-chrome:latest
 
 USER root
 
