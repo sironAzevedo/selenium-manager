@@ -103,25 +103,31 @@ jobs:
     steps:
       - name: Execute deploy
         uses: appleboy/ssh-action@v1
+        env:
+          JSON_B64: ${{ needs.build_and_publish.outputs.JSON_B64 }}
+          APP_VERSION: ${{ needs.build_and_publish.outputs.APP_VERSION }}
+          APP_NAME: ${{ needs.build_and_publish.outputs.APP_NAME }}
+          APP_PORT: ${{ needs.build_and_publish.outputs.APP_PORT }}
+          REPO_DOCKER: ${{ secrets.docker-repo }}
         with:
           host: ${{ secrets.vps-host }}
           username: ${{ secrets.vps-username }}
           key: ${{ secrets.vps-ssh-private-key }}
           script: |
             set -euo pipefail
-            
-            APP_VERSION="${{ needs.build_and_publish.outputs.APP_VERSION }}"
-            APP_NAME="${{ needs.build_and_publish.outputs.APP_NAME }}"
-            APP_PORT="${{ needs.build_and_publish.outputs.APP_PORT }}"
-            REPO_DOCKER="${{ secrets.docker-repo }}"
+
+            echo "Versão: $APP_VERSION"
+            echo "Nome: $APP_NAME"
+            echo "Portas: $APP_PORT"
+
             IMAGE_NAME="$REPO_DOCKER/$APP_NAME:$APP_VERSION"
-            
+
             if ! command -v jq &> /dev/null; then
                 sudo apt-get update && sudo apt-get install -y jq
             fi
-            
+
             JSON_CONFIG=$(echo "$JSON_B64" | base64 -d)
-            
+
             APP_NETWORK=$(echo "$JSON_CONFIG" | jq -r '.network // "app-network"')
             CPUS=$(echo "$JSON_CONFIG" | jq -r '.configContainer.cpus // "1.0"')
             MEMORY=$(echo "$JSON_CONFIG" | jq -r '.configContainer.memory // "800m"')
@@ -130,16 +136,17 @@ jobs:
             TMP_DIR=$(mktemp -d)
             ENV_FILE="$TMP_DIR/$APP_NAME/${{ github.run_number }}/.env"
             mkdir -p $(dirname "$ENV_FILE")
+
             echo "$JSON_CONFIG" | jq -r '.environment[] | "\(.name)=\(.value)"' > "$ENV_FILE"
-                        
+
             if [ "$(docker ps -q -f name=^/${APP_NAME}$)" ]; then
                 docker stop "$APP_NAME"
                 docker rm "$APP_NAME"
             fi
-            
+
             OLD_IMAGES=$(docker images -q $REPO_DOCKER/$APP_NAME)
             [ -n "$OLD_IMAGES" ] && docker rmi -f $OLD_IMAGES || true
-            
+
             docker run -d \
               $APP_PORT \
               --name "$APP_NAME" \
@@ -150,7 +157,7 @@ jobs:
               --memory-swap="$MEMORY_SWAP" \
               --env-file "$ENV_FILE" \
               "$IMAGE_NAME"
-            
+
             rm -rf "$TMP_DIR"
 
       - name: Validar Selenium Manager
