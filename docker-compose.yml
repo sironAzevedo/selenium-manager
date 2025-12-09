@@ -1,0 +1,24 @@
+version: "3.9"
+services:
+  selenium:
+    build: .
+    container_name: selenium_downloader
+    shm_size: 4g
+    ports:
+      - "4444:4444"
+      - "7900:7900"
+      - "9000:9000"
+    volumes:
+      - /Users/siron/Downloads/selenium:/home/seluser/Downloads
+      - ./selenium-logs:/var/log/selenium
+    environment:
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - SE_NODE_MAX_SESSIONS=1
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+networks:
+  app-network:
+    external:
+      name: app-network
