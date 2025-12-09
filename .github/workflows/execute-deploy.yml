@@ -101,6 +101,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ build_and_publish ]
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Execute deploy
         uses: appleboy/ssh-action@v1
         with:
