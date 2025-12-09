@@ -1,0 +1,24 @@
+{
+  "nameAPP": "selenium-manager",
+  "port": [
+    "4444:4444",
+    "7900:7900",
+    "9000:9000"
+  ],
+  "network": "app-network",
+  "configContainer": {
+    "cpus": "0.8",
+    "memory": "1G",
+    "memorySwap": "1G"
+  },
+  "environment": [
+    {
+      "name": "SE_NODE_OVERRIDE_MAX_SESSIONS",
+      "value": "true"
+    },
+    {
+      "name": "SE_NODE_MAX_SESSIONS",
+      "value": "1"
+    }
+  ]
+}
