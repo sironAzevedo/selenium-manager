@@ -82,7 +82,31 @@ jobs:
         env:
           SELENIUM_URL: http://localhost:4444/wd/hub
         run: |
-          python3 testes/test_google.py
+          echo "=== Running test at $(date)" > test-results.txt
+          echo "Selenium URL: $SELENIUM_URL" >> test-results.txt
+
+          # Executa o teste real
+          if python3 testes/test_google.py >> test-results.txt 2>&1; then
+            echo "TEST_RESULT=SUCCESS" >> test-results.txt
+          else
+            echo "TEST_RESULT=FAILED" >> test-results.txt
+          fi
+
+      - name: Upload test artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-test-report
+          path: test-results.txt
+          retention-days: 5
+
+      - name: Upload screenshot artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-test-screenshot
+          path: google_test.png
+          retention-days: 5
 
       - name: Collect container logs (always)
         if: always()
