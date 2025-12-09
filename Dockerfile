@@ -42,7 +42,7 @@ RUN pip3 install flask
 ENTRYPOINT ["/opt/entrypoint-lite.sh"]
 
 # Expor portas
-EXPOSE 4444 7900 9000
+EXPOSE 4444 7900 10000
 
 USER seluser
 WORKDIR /home/seluser

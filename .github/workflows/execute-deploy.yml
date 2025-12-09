@@ -158,4 +158,4 @@ jobs:
       - name: Validar Selenium Manager
         uses: ./.github/actions/selenium-healthcheck
         with:
-          base_url: "http://localhost:9000"
+          base_url: "http://localhost:10000"

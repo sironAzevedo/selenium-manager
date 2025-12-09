@@ -29,14 +29,14 @@ jobs:
             --name selenium_ci \
             -p 4444:4444 \
             -p 7900:7900 \
-            -p 9000:9000 \
+            -p 10000:10000 \
             selenium-manager:ci
 
       - name: Wait for API to be available (timeout 120s)
         run: |
-          echo "Waiting for control API at http://localhost:9000/status"
+          echo "Waiting for control API at http://localhost:10000/status"
           for i in {1..24}; do
-            if curl -sSf http://localhost:9000/status >/dev/null 2>&1; then
+            if curl -sSf http://localhost:10000/status >/dev/null 2>&1; then
               echo "API up"
               break
             fi
@@ -46,7 +46,7 @@ jobs:
       - name: Start Selenium inside container via control API
         run: |
           echo "Starting Selenium via API"
-          curl -sS -X POST http://localhost:9000/start | jq -C . || true
+          curl -sS -X POST http://localhost:10000/start | jq -C . || true
 
       - name: Wait for Selenium readiness (timeout 180s)
         run: |
@@ -60,7 +60,7 @@ jobs:
               break
             fi
             # Fallback: try the control-selenium status
-            if curl -sS http://localhost:9000/status | grep -q 'running'; then
+            if curl -sS http://localhost:10000/status | grep -q 'running'; then
               READY=true
               break
             fi

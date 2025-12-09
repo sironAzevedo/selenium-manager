@@ -3,7 +3,7 @@ description: "Verifica /status, executa /start e /stop conforme necessário"
 
 inputs:
   base_url:
-    description: "URL base do Selenium Manager (ex: http://localhost:9000)"
+    description: "URL base do Selenium Manager (ex: http://localhost:10000)"
     required: true
 
 runs:

@@ -86,14 +86,14 @@ run-tests:
 
 # Iniciar API de controle do Selenium
 start-api:
-	curl -X POST http://localhost:9000/start
+	curl -X POST http://localhost:10000/start
 	@echo "==> API de controle do Selenium iniciada."
 
 # Parar API de controle do Selenium
 stop-api:
-	curl -X POST http://localhost:9000/stop
+	curl -X POST http://localhost:10000/stop
 	@echo "==> API de controle do Selenium parada."
 
 # Verificar status da API de controle do Selenium
 status-api:
-	curl http://localhost:9000/status
+	curl http://localhost:10000/status

@@ -6,7 +6,7 @@ Público-alvo: desenvolvedores e engenheiros de QA que precisam de um Selenium c
 
 ## Contrato da API de controle
 
-Endpoints (API Flask embutida, escuta por padrão na porta 9000):
+Endpoints (API Flask embutida, escuta por padrão na porta 10000):
 
 - POST /start
   - Ação: inicia o processo Selenium se não estiver rodando.
@@ -38,7 +38,7 @@ Erros esperados: quando o script shell falha ou retorna JSON inválido, a API re
   - `entrypoint-lite.sh`: entrypoint do container que prepara Xvfb, fluxbox, noVNC e inicia a API Flask (não inicia o Selenium automaticamente).
   - `wait-for-selenium.sh`: utilitário simples que aguarda readiness consultando `http://localhost:4444/status` (observação: o script procura por "ready" no output — ver nota de troubleshooting).
 - `app/app.py`: API Flask que expõe endpoints de controle. Chama `/usr/local/bin/control-selenium` (arquivo copiado a partir de `scripts/control-selenium.sh`) e parseia JSON.
-- `docker-compose.yml`: exemplo de orquestração para desenvolvimento com portas mapeadas 4444, 7900 (VNC), 9000 (API). Monta volumes para downloads e logs.
+- `docker-compose.yml`: exemplo de orquestração para desenvolvimento com portas mapeadas 4444, 7900 (VNC), 10000 (API). Monta volumes para downloads e logs.
 - `Makefile` (raiz): atalhos para build/up/start/stop/status/wait/start-all, e integração com área de testes.
 - `testes/test_google.py`: teste exemplo em Python usando `selenium.webdriver.Remote` para conectar-se ao endpoint do Selenium.
 
@@ -46,14 +46,14 @@ Erros esperados: quando o script shell falha ou retorna JSON inválido, a API re
 
 1. Build da imagem: `make build` (executa `docker compose build --no-cache`).
 2. Subir container: `make up` (executa `docker compose up -d`). Entrypoint inicia o ambiente gráfico e a API Flask, mas NÃO inicia o Selenium automaticamente.
-3. Iniciar Selenium: via API `POST http://localhost:9000/start` ou `make start-selenium` (que executa `docker exec <container> control-selenium start`).
+3. Iniciar Selenium: via API `POST http://localhost:10000/start` ou `make start-selenium` (que executa `docker exec <container> control-selenium start`).
 4. Aguardar readiness: `make wait` ou `docker exec <container> wait-for-selenium`.
 5. Executar testes/consumidores (ex.: `testes/test_google.py` usando `http://localhost:4444/wd/hub`).
 6. Parar Selenium: `POST /stop` ou `make stop-selenium`.
 
 ## Como executar localmente (exemplo rápido)
 
-Requisitos: Docker (e docker-compose), Make, portas livres 4444/7900/9000.
+Requisitos: Docker (e docker-compose), Make, portas livres 4444/7900/10000.
 
 1) Build e subir o container:
 
@@ -66,7 +66,7 @@ make up
 
 ```bash
 # via API
-curl -X POST http://localhost:9000/start
+curl -X POST http://localhost:10000/start
 
 # ou via Make (usa docker exec)
 make start-selenium
@@ -145,7 +145,7 @@ docker exec -it selenium_downloader tail -n 200 /var/log/selenium.log
 - Verificar status da API de controle:
 
 ```bash
-curl http://localhost:9000/status
+curl http://localhost:10000/status
 ```
 
 - Se `make wait` não retorna: exec no container e inspecione `/var/log/selenium.log` e verifique se o Selenium iniciou corretamente e está escutando na porta 4444.
