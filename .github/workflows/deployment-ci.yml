@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-   build-and-test:
+  build-and-test:
     runs-on: ubuntu-latest
     services: {}
     steps:
@@ -99,21 +99,21 @@ jobs:
         run: |
           docker rm -f selenium_ci || true  
 
-    create_pr:
-      runs-on: ubuntu-latest
-      needs: [ compile, test ]
+  create_pr:
+    runs-on: ubuntu-latest
+    needs: [ build-and-test ]
 
-      steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-        - name: Create Pull Request
-          uses: peter-evans/create-pull-request@v5
-          with:
-            token: ${{ secrets.GH_TOKEN }}
-            commit-message: 'Automatic PR: Merge changes to main'
-            branch: ${{ github.ref }}
-            base: main
-            title: 'Automatic PR from ${{ github.ref }}'
-            body: |
-              Este PR foi criado automaticamente pelo fluxo de trabalho de CI para mesclar alterações de ${{ github.ref }} para main.
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          commit-message: 'Automatic PR: Merge changes to main'
+          branch: ${{ github.ref }}
+          base: main
+          title: 'Automatic PR from ${{ github.ref }}'
+          body: |
+            Este PR foi criado automaticamente pelo fluxo de trabalho de CI para mesclar alterações de ${{ github.ref }} para main.
