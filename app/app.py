@@ -172,7 +172,7 @@ def index():
 
 if __name__ == "__main__":
 
-    log_message("API Flask iniciando na porta 9000...")
+    log_message("API Flask iniciando na porta 10000...")
         
     # Verificar configuração inicial
     log_message("Verificando configuração inicial...")
@@ -189,4 +189,4 @@ if __name__ == "__main__":
     
     log_message(f"Status inicial: {msg}")
     
-    app.run(host="0.0.0.0", port=9000)
+    app.run(host="0.0.0.0", port=10000)

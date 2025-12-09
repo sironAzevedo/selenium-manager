@@ -7,7 +7,7 @@ services:
     ports:
       - "4444:4444"
       - "7900:7900"
-      - "9000:9000"
+      - "10000:10000"
     volumes:
       - /Users/siron/Downloads/selenium:/home/seluser/Downloads
       - ./selenium-logs:/var/log/selenium
