@@ -90,7 +90,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ secrets.docker-repo }}/${{ steps.json_config.outputs.APP_NAME }}:${{ steps.versioning.outputs.APP_VERSION }}
