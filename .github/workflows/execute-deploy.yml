@@ -132,19 +132,49 @@ jobs:
             MEMORY=$(echo "$JSON_CONFIG" | jq -r '.configContainer.memory // "800m"')
             MEMORY_SWAP=$(echo "$JSON_CONFIG" | jq -r '.configContainer.memorySwap // "1G"')
 
+            # --------------------------------------
+            # Criar arquivo .env
+            # --------------------------------------
             TMP_DIR=$(mktemp -d)
             ENV_FILE="$TMP_DIR/$APP_NAME/${{ github.run_number }}/.env"
-            mkdir -p $(dirname "$ENV_FILE")
+            mkdir -p "$(dirname "$ENV_FILE")"
+
             echo "$JSON_CONFIG" | jq -r '.environment[] | "\(.name)=\(.value)"' > "$ENV_FILE"
-                        
-            if [ "$(docker ps -q -f name=^/${APP_NAME}$)" ]; then
-                docker stop "$APP_NAME"
-                docker rm "$APP_NAME"
+
+            # --------------------------------------
+            # Remover container (independente da versão)
+            # --------------------------------------
+            echo "🔍 Verificando containers antigos..."
+            EXISTING_CONTAINER=$(docker ps -aq -f name="^${APP_NAME}$" || true)
+
+            if [ -n "$EXISTING_CONTAINER" ]; then
+                echo "🛑 Parando container antigo..."
+                docker stop "$APP_NAME" || true
+                echo "🗑 Removendo container antigo..."
+                docker rm "$APP_NAME" || true
+            else
+                echo "✔ Nenhum container existente encontrado."
             fi
+
+            # --------------------------------------
+            # Remover imagens antigas (todas as versões)
+            # --------------------------------------
+            echo "🔍 Removendo imagens antigas..."
+            OLD_IMAGES=$(docker images -q "$REPO_DOCKER/$APP_NAME" || true)
+
+            if [ -n "$OLD_IMAGES" ]; then
+                echo "🗑 Removendo imagens:"
+                echo "$OLD_IMAGES"
+                docker rmi -f $OLD_IMAGES || true
+            else
+                echo "✔ Nenhuma imagem antiga encontrada."
+            fi
+
+            # --------------------------------------
+            # Criar novo container
+            # --------------------------------------
             
-            OLD_IMAGES=$(docker images -q $REPO_DOCKER/$APP_NAME)
-            [ -n "$OLD_IMAGES" ] && docker rmi -f $OLD_IMAGES || true
-            
+            echo "🚀 Subindo novo container..."
             docker run -d \
               $APP_PORT \
               --name "$APP_NAME" \
