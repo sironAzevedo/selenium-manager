@@ -1,0 +1,150 @@
+name: selenium-manager-ci
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      github_environment:
+        required: false
+        type: string
+    secrets:
+      docker-user:
+        required: true
+      docker-pass:
+        required: true
+      docker-repo:
+        required: true
+      github-token:
+        required: true
+      vps-host:
+        required: true
+      vps-username:
+        required: true
+      vps-ssh-private-key:
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build_and_publish:
+    name: Build, Package and Publish
+    runs-on: ubuntu-latest
+    outputs:
+      APP_VERSION: ${{ steps.versioning.outputs.APP_VERSION }}
+      JSON_B64: ${{ steps.replace_secrets.outputs.JSON_B64 }}
+      APP_NAME: ${{ steps.json_config.outputs.APP_NAME }}
+      APP_PORT: ${{ steps.json_config.outputs.APP_PORT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read config.json for the selected environment
+        id: json_config
+        run: |
+          ENV_NAME=${{ inputs.environment }}
+          CONFIG_PATH="infra/$ENV_NAME/config.json"
+          
+          sudo apt-get update && sudo apt-get install -y jq
+          APP_NAME=$(jq -r '.nameAPP' "$CONFIG_PATH")
+          APP_PORT=$(jq -r '.port' "$CONFIG_PATH")
+          
+          echo "APP_NAME=${APP_NAME}" >> $GITHUB_OUTPUT
+          echo "APP_PORT=${APP_PORT}" >> $GITHUB_OUTPUT
+
+      - name: Replace Secrets in JSON Config
+        id: replace_secrets
+        env:
+          ENV_NAME: ${{ inputs.environment }}
+        run: |
+          CONFIG_PATH="infra/$ENV_NAME/config.json"
+          JSON_CONFIG=$(cat "$CONFIG_PATH")
+          JSON_B64=$(echo "$JSON_CONFIG" | base64 -w0 2>/dev/null || echo "$JSON_CONFIG" | base64)
+          echo "JSON_B64=$JSON_B64" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.docker-user }}
+          password: ${{ secrets.docker-pass }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.docker-repo }}/${{ steps.json_config.outputs.APP_NAME }}:${{ steps.versioning.outputs.APP_VERSION }}
+            ${{ secrets.docker-repo }}/${{ steps.json_config.outputs.APP_NAME }}:latest
+
+  deploy:
+    name: Deploy da aplicação
+    runs-on: ubuntu-latest
+    needs: [ build_and_publish ]
+    steps:
+      - name: Execute deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.vps-host }}
+          username: ${{ secrets.vps-username }}
+          key: ${{ secrets.vps-ssh-private-key }}
+          script: |
+            set -euo pipefail
+            
+            APP_VERSION="${{ needs.build_and_publish.outputs.APP_VERSION }}"
+            APP_NAME="${{ needs.build_and_publish.outputs.APP_NAME }}"
+            APP_PORT="${{ needs.build_and_publish.outputs.APP_PORT }}"
+            REPO_DOCKER="${{ secrets.docker-repo }}"
+            IMAGE_NAME="$REPO_DOCKER/$APP_NAME:$APP_VERSION"
+            
+            if ! command -v jq &> /dev/null; then
+                sudo apt-get update && sudo apt-get install -y jq
+            fi
+            
+            JSON_CONFIG=$(echo "$JSON_B64" | base64 -d)
+            
+            APP_NETWORK=$(echo "$JSON_CONFIG" | jq -r '.network // "app-network"')
+            CPUS=$(echo "$JSON_CONFIG" | jq -r '.configContainer.cpus // "1.0"')
+            MEMORY=$(echo "$JSON_CONFIG" | jq -r '.configContainer.memory // "800m"')
+            MEMORY_SWAP=$(echo "$JSON_CONFIG" | jq -r '.configContainer.memorySwap // "1G"')
+            APP_PORT=$(echo "$JSON_CONFIG" | jq -r '.port[]? | "-p \(. )"' | xargs)
+
+            TMP_DIR=$(mktemp -d)
+            ENV_FILE="$TMP_DIR/$APP_NAME/${{ github.run_number }}/.env"
+            mkdir -p $(dirname "$ENV_FILE")
+            echo "$JSON_CONFIG" | jq -r '.environment[] | "\(.name)=\(.value)"' > "$ENV_FILE"
+                        
+            if [ "$(docker ps -q -f name=^/${APP_NAME}$)" ]; then
+                docker stop "$APP_NAME"
+                docker rm "$APP_NAME"
+            fi
+            
+            OLD_IMAGES=$(docker images -q $REPO_DOCKER/$APP_NAME)
+            [ -n "$OLD_IMAGES" ] && docker rmi -f $OLD_IMAGES || true
+            
+            docker run -d \
+              $APP_PORT \
+              --name "$APP_NAME" \
+              --network "$APP_NETWORK" \
+              --restart always \
+              --cpus="$CPUS" \
+              --memory="$MEMORY" \
+              --memory-swap="$MEMORY_SWAP" \
+              --env-file "$ENV_FILE" \
+              "$IMAGE_NAME"
+            
+            rm -rf "$TMP_DIR"
+
+      - name: Validar Selenium Manager
+        uses: ./.github/actions/selenium-healthcheck
+        with:
+          base_url: "http://localhost:9000"
