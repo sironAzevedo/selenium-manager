@@ -2,6 +2,10 @@
   "nameAPP": "selenium-manager",
   "port": ["4444:4444", "7900:7900", "10000:10000"],
   "network": "app-network",
+  "volumes": [
+    "/home/exports:/home/seluser/Downloads",
+    "./selenium-logs:/var/log/selenium"
+  ],
   "configContainer": {
     "cpus": "0.8",
     "memory": "1G",

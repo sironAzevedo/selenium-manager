@@ -117,6 +117,10 @@ jobs:
             echo "📄 Decodificando config.json"
             JSON_CONFIG=$(echo "$JSON_B64" | base64 -d)
 
+            echo "📦 Montando volumes (se houver)"
+            DOCKER_VOLUMES=$(echo "$JSON_CONFIG" | jq -r '.volumes[]? | "-v \(. )"' | xargs)
+            echo "   Volumes: $DOCKER_VOLUMES"
+
             # ----- Preparar env -----
             TMP_DIR=$(mktemp -d)
             ENV_FILE="$TMP_DIR/$APP_NAME/.env"
@@ -141,6 +145,7 @@ jobs:
               --network "$(echo "$JSON_CONFIG" | jq -r '.network')" \
               --restart always \
               --env-file "$ENV_FILE" \
+              $DOCKER_VOLUMES \
               "$IMAGE_NAME"
 
             rm -rf "$TMP_DIR"
