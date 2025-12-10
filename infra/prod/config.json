@@ -3,7 +3,7 @@
   "port": ["4444:4444", "7900:7900", "10000:10000"],
   "network": "app-network",
   "volumes": [
-    "/home/exports:/home/seluser/Downloads",
+    "/home/exports/selenium/Downloads:/home/seluser/Downloads",
     "./selenium-logs:/var/log/selenium"
   ],
   "configContainer": {
