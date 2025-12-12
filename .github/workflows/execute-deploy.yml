@@ -72,25 +72,25 @@ jobs:
           NEW_VERSION="1.0.${{ github.run_number }}"
           echo "APP_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      # - name: Set up Docker Buildx
-      #   uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      # - name: Login DockerHub
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.docker-user }}
-      #     password: ${{ secrets.docker-pass }}
+      - name: Login DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.docker-user }}
+          password: ${{ secrets.docker-pass }}
 
-      # - name: Build and push image
-      #   uses: docker/build-push-action@v5
-      #   with:
-      #     context: .
-      #     file: ./Dockerfile
-      #     platforms: linux/amd64
-      #     push: true
-      #     tags: |
-      #       ${{ secrets.docker-repo }}/${{ steps.json_config.outputs.APP_NAME }}:${{ steps.versioning.outputs.APP_VERSION }}
-      #       ${{ secrets.docker-repo }}/${{ steps.json_config.outputs.APP_NAME }}:latest
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ secrets.docker-repo }}/${{ steps.json_config.outputs.APP_NAME }}:${{ steps.versioning.outputs.APP_VERSION }}
+            ${{ secrets.docker-repo }}/${{ steps.json_config.outputs.APP_NAME }}:latest
 
   deploy:
     name: Deploy + Healthcheck
@@ -112,7 +112,7 @@ jobs:
             APP_NAME="${{ needs.build_and_publish.outputs.APP_NAME }}"
             APP_PORT="${{ needs.build_and_publish.outputs.APP_PORT }}"
             REPO_DOCKER="${{ secrets.docker-repo }}"
-            IMAGE_NAME="$REPO_DOCKER/$APP_NAME:latest"
+            IMAGE_NAME="$REPO_DOCKER/$APP_NAME:$APP_VERSION"
 
             echo "📄 Decodificando config.json"
             JSON_CONFIG=$(echo "$JSON_B64" | base64 -d)
@@ -162,23 +162,67 @@ jobs:
               "$IMAGE_NAME"
 
             rm -rf "$TMP_DIR"
+      
+      - name: Remote Healthcheck (via vps-host)
+        run: |
+          set -euo pipefail
+          
+          BASE="http://${{ secrets.vps-host }}:10000"
 
-            # =====================================================
-            #              HEALTHCHECK (executado no VPS)
-            # =====================================================
+          echo "📡 Testando $BASE/status..."
 
-            echo "🩺 Executando healthcheck externo"
+          STATUS=$(curl -s -w "\n%{http_code}" "$BASE/status" || true)
+          BODY=$(echo "$STATUS" | head -n1)
+          CODE=$(echo "$STATUS" | tail -n1)
 
-            echo "User: $(whoami)"
-            echo "Home: $HOME"
-            ls -lha $HOME
-            ls -lha /root
+          echo "STATUS CODE: $CODE"
+          echo "BODY: $BODY"
 
-            if bash "$HOME/healthcheck.sh"; then
-              echo "🎉 HEALTHCHECK OK — Pipeline concluído com sucesso!"
-            else
-              echo "❌ HEALTHCHECK FALHOU — Pipeline encerrado com erro!"
-              exit 1
-            fi
+          if [ "$CODE" -ne 200 ]; then
+            echo "❌ /status falhou (HTTP $CODE)"
+            exit 1
+          fi
 
-            echo "🎉 HEALTHCHECK OK — Selenium Manager validado com sucesso!"
+          OK_VALUE=$(echo "$BODY" | jq -r '.ok')
+
+          if [ "$OK_VALUE" != "false" ]; then
+            echo "❌ Esperado ok=false no /status — retornou $OK_VALUE"
+            exit 1
+          fi
+
+          echo "🟡 Selenium parado — chamando /start remoto..."
+
+          START=$(curl -s -w "\n%{http_code}" -X POST "$BASE/start")
+          S_BODY=$(echo "$START" | head -n1)
+          S_CODE=$(echo "$START" | tail -n1)
+
+          echo "START CODE: $S_CODE"
+          echo "START BODY: $S_BODY"
+
+          if [ "$S_CODE" -ne 200 ]; then
+            echo "❌ /start falhou (HTTP $S_CODE)"
+            exit 1
+          fi
+
+          START_OK=$(echo "$S_BODY" | jq -r '.ok')
+          if [ "$START_OK" != "true" ]; then
+            echo "❌ Esperado ok=true após /start — retornou $START_OK"
+            exit 1
+          fi
+
+          echo "🟢 Selenium iniciou — chamando /stop remoto..."
+
+          STOP=$(curl -s -w "\n%{http_code}" -X POST "$BASE/stop")
+          ST_BODY=$(echo "$STOP" | head -n1)
+          ST_CODE=$(echo "$STOP" | tail -n1)
+
+          echo "STOP CODE: $ST_CODE"
+          echo "STOP BODY: $ST_BODY"
+
+          STOPPED=$(echo "$ST_BODY" | jq -r '.stopped')
+          if [ "$STOPPED" != "true" ]; then
+            echo "❌ Esperado stopped=true — retornou $STOPPED"
+            exit 1
+          fi
+
+          echo "🎉 HEALTHCHECK REMOTO OK — VPS respondendo perfeitamente!"  
