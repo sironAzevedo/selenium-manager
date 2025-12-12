@@ -5,6 +5,16 @@ echo "======================================"
 echo "   Selenium LITE MODE (manual start)  "
 echo "======================================"
 
+echo "[ENTRYPOINT-LITE] Ajustando permissões..."
+
+# Como o ENTRYPOINT roda como root inicialmente, isso funciona:
+chown -R seluser:seluser /home/seluser || true
+chmod -R 777 /home/seluser/Downloads || true
+chmod -R 777 /home/seluser || true
+
+echo "[ENTRYPOINT-LITE] Permissões ajustadas!"
+echo ""
+
 echo "[ENTRYPOINT-LITE] Iniciando Xvfb..."
 Xvfb :99 -screen 0 1920x1080x24 &
 export DISPLAY=:99
@@ -17,12 +27,6 @@ sleep 1
 echo "[ENTRYPOINT-LITE] Iniciando noVNC..."
 /usr/share/novnc/utils/novnc_proxy --vnc localhost:5900 --listen 7900 &
 sleep 1
-
-# Corrigir permissões que o Chrome ajusta automaticamente
-echo "Fixing permissions..."
-sudo chown -R seluser:seluser /home/seluser
-sudo chmod -R 777 /home/seluser/Downloads || true
-sudo chmod -R 777 /home/seluser || true
 
 echo "[ENTRYPOINT] Iniciando API Flask..."
 python3 /opt/scripts/selenium_api.py &

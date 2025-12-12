@@ -14,10 +14,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Criar diretórios necessários
-RUN mkdir -p /home/seluser/Downloads \
-    && chmod -R 777 /home/seluser/Downloads \
+RUN sudo chmod -R 777 /home/seluser/Downloads \
     && chmod -R 777 /var/log \
-    && chown -R seluser:seluser /home/seluser
+    && sudo chown -R seluser:seluser /home/seluser
 
 # ====== COPIAR SCRIPTS ======
 COPY scripts/start-selenium.sh /opt/bin/start-selenium.sh
