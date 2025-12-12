@@ -112,7 +112,7 @@ jobs:
             APP_NAME="${{ needs.build_and_publish.outputs.APP_NAME }}"
             APP_PORT="${{ needs.build_and_publish.outputs.APP_PORT }}"
             REPO_DOCKER="${{ secrets.docker-repo }}"
-            IMAGE_NAME="$REPO_DOCKER/$APP_NAME:$latest"
+            IMAGE_NAME="$REPO_DOCKER/$APP_NAME:latest"
 
             echo "📄 Decodificando config.json"
             JSON_CONFIG=$(echo "$JSON_B64" | base64 -d)
