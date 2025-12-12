@@ -171,8 +171,9 @@ jobs:
 
             echo "User: $(whoami)"
             echo "Home: $HOME"
-            ls -lha $HOME
-            ls -lha /
+            ls -l $HOME
+            ls -l $HOME/home
+            ls -l $HOME/usr
 
             if bash "$HOME/healthcheck.sh"; then
               echo "🎉 HEALTHCHECK OK — Pipeline concluído com sucesso!"
