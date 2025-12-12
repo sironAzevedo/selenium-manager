@@ -18,6 +18,12 @@ echo "[ENTRYPOINT-LITE] Iniciando noVNC..."
 /usr/share/novnc/utils/novnc_proxy --vnc localhost:5900 --listen 7900 &
 sleep 1
 
+# Corrigir permissões que o Chrome ajusta automaticamente
+echo "Fixing permissions..."
+sudo chown -R seluser:seluser /home/seluser
+sudo chmod -R 777 /home/seluser/Downloads || true
+sudo chmod -R 777 /home/seluser || true
+
 echo "[ENTRYPOINT] Iniciando API Flask..."
 python3 /opt/scripts/selenium_api.py &
 API_PID=$!
