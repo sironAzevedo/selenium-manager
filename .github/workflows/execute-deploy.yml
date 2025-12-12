@@ -199,33 +199,45 @@ jobs:
               local method="$1"
               local url="$2"
               local expected_http="$3"
-              local retries=10
+              local retries=15      # Aumentei para dar mais tempo de subida
               local attempt=1
+              local tmp_body=$(mktemp) # Arquivo temporário para o corpo
 
               while [ $attempt -le $retries ]; do
                 echo "🔎 Tentando chamada ($attempt/$retries): $method $url"
 
-                RESPONSE=$(curl -sS --max-time 4 -w "\n%{http_code}" -X "$method" "$url" || echo "")
-                BODY=$(echo "$RESPONSE" | head -n1)
-                CODE=$(echo "$RESPONSE" | tail -n1)
+                # Captura HTTP Code e salva o corpo no arquivo tmp
+                # -s: Silent mode (sem barra de progresso)
+                # -o: Output no arquivo
+                # -w: Write out apenas o http_code no stdout
+                HTTP_CODE=$(curl -s -o "$tmp_body" -w "%{http_code}" -X "$method" "$url" || echo "000")
 
-                # Validar se retorno é JSON
-                if ! echo "$BODY" | jq empty 2>/dev/null; then
-                  echo "⚠️ Retorno inválido ou não-JSON"
+                # Verifica se o curl falhou completamente (código 000) ou se o status não é o esperado
+                if [ "$HTTP_CODE" -eq "$expected_http" ]; then
+                  # Valida se o conteúdo é JSON válido antes de retornar
+                  if cat "$tmp_body" | jq empty 2>/dev/null; then
+                    cat "$tmp_body"
+                    rm -f "$tmp_body"
+                    return 0
+                  else
+                    echo "⚠️  HTTP $HTTP_CODE recebido, mas o JSON é inválido."
+                  fi
+                else
+                  echo "⚠️  Falha na conexão ou Status inesperado: $HTTP_CODE (Esperado: $expected_http)"
                 fi
 
-                echo "➡️ HTTP: $CODE | BODY: $BODY"
-
-                if [ "$CODE" -eq "$expected_http" ]; then
-                  echo "$BODY"
-                  return 0
-                fi
-
-                sleep $((attempt + 1))
+                # Se chegou aqui, falhou. Espera e tenta de novo.
+                sleep 3
                 attempt=$((attempt+1))
               done
 
-              echo "❌ Falha após $retries tentativas — Endpoint indisponível: $url"
+              rm -f "$tmp_body"
+              echo "❌ Falha crítica após $retries tentativas no endpoint: $url"
+              
+              # Imprime logs do container para ajudar no debug
+              echo "📋 Logs do container (últimas 20 linhas):"
+              docker logs --tail 20 "$APP_NAME"
+              
               exit 1
             }
 
