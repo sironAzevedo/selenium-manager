@@ -167,9 +167,9 @@ jobs:
             #              HEALTHCHECK (executado no VPS)
             # =====================================================
 
-            echo "🩺 Executando /home/export/healthcheck.sh"
+            echo "🩺 Executando healthcheck externo"
 
-            if bash /home/export/healthcheck.sh; then
+            if bash "$HOME/healthcheck.sh"; then
               echo "🎉 HEALTHCHECK OK — Pipeline concluído com sucesso!"
             else
               echo "❌ HEALTHCHECK FALHOU — Pipeline encerrado com erro!"
