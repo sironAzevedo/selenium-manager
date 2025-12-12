@@ -172,36 +172,75 @@ jobs:
             sleep 5
             echo "📡 Testando /status..."
 
+            # ---------------------------
+            # 1️⃣ CHAMADA /status
+            # ---------------------------
             STATUS=$(curl -s -w "\n%{http_code}" "$BASE_URL/status" || true)
             BODY=$(echo "$STATUS" | head -n1)
             CODE=$(echo "$STATUS" | tail -n1)
 
+            echo "STATUS CODE: $CODE"
+            echo "BODY: $BODY"
+
+            # Validar status code
             if [ "$CODE" -ne 200 ]; then
-              echo "❌ /status falhou"
+              echo "❌ /status falhou (HTTP $CODE)"
               exit 1
             fi
 
+            # Validar que ok == false
             OK_VALUE=$(echo "$BODY" | jq -r '.ok')
 
-            if [ "$OK_VALUE" != "true" ]; then
-              echo "⚠️ Selenium não rodando — chamando /start"
-              START=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/start")
-              S_BODY=$(echo "$START" | head -n1)
-              S_CODE=$(echo "$START" | tail -n1)
-
-              if [ "$S_CODE" -ne 200 ] || [ "$(echo "$S_BODY" | jq -r '.ok')" != "true" ]; then
-                echo "❌ /start falhou"
-                exit 1
-              fi
+            if [ "$OK_VALUE" != "false" ]; then
+              echo "❌ Esperado ok=false no /status, mas retornou ok=$OK_VALUE"
+              exit 1
             fi
 
-            echo "🛑 Chamando /stop..."
+            echo "🟡 Selenium parado — prosseguindo com /start..."
+
+            # ---------------------------
+            # 2️⃣ CHAMAR /start
+            # ---------------------------
+            START=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/start")
+            S_BODY=$(echo "$START" | head -n1)
+            S_CODE=$(echo "$START" | tail -n1)
+
+            echo "START CODE: $S_CODE"
+            echo "START BODY: $S_BODY"
+
+            if [ "$S_CODE" -ne 200 ]; then
+              echo "❌ /start falhou (HTTP $S_CODE)"
+              exit 1
+            fi
+
+            START_OK=$(echo "$S_BODY" | jq -r '.ok')
+
+            if [ "$START_OK" != "true" ]; then
+              echo "❌ Era esperado ok=true após /start, mas retornou $START_OK"
+              exit 1
+            fi
+
+            echo "🟢 Selenium iniciado com sucesso — prosseguindo com /stop..."
+
+            # ---------------------------
+            # 3️⃣ CHAMAR /stop
+            # ---------------------------
             STOP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/stop")
             ST_BODY=$(echo "$STOP" | head -n1)
             ST_CODE=$(echo "$STOP" | tail -n1)
 
-            if [ "$ST_CODE" -ne 200 ] || [ "$(echo "$ST_BODY" | jq -r '.ok')" != "true" ]; then
-              echo "❌ /stop falhou"
+            echo "STOP CODE: $ST_CODE"
+            echo "STOP BODY: $ST_BODY"
+
+            if [ "$ST_CODE" -ne 200 ]; then
+              echo "❌ /stop falhou (HTTP $ST_CODE)"
+              exit 1
+            fi
+
+            STOPPED=$(echo "$ST_BODY" | jq -r '.stopped')
+
+            if [ "$STOPPED" != "true" ]; then
+              echo "❌ Era esperado stopped=true após /stop, mas retornou $STOPPED"
               exit 1
             fi
 
