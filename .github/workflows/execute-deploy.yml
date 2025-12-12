@@ -121,6 +121,16 @@ jobs:
             DOCKER_VOLUMES=$(echo "$JSON_CONFIG" | jq -r '.volumes[]? | "-v \(. )"' | xargs)
             echo "   Volumes: $DOCKER_VOLUMES"
 
+            # Extrai configs com fallback
+            CPUS=$(echo "$JSON_CONFIG" | jq -r '.configContainer // {} | .cpus // "1.0"')
+            MEMORY=$(echo "$JSON_CONFIG" | jq -r '.configContainer // {} | .memory // "800m"')
+            MEMORY_SWAP=$(echo "$JSON_CONFIG" | jq -r '.configContainer // {} | .memorySwap // "1G"')
+            
+            echo "✅ Config extraída:"
+            echo "   CPUs: $CPUS"
+            echo "   Memory: $MEMORY"
+            echo "   Memory Swap: $MEMORY_SWAP"
+
             # ----- Preparar env -----
             TMP_DIR=$(mktemp -d)
             ENV_FILE="$TMP_DIR/$APP_NAME/.env"
@@ -143,6 +153,9 @@ jobs:
               $APP_PORT \
               --name "$APP_NAME" \
               --network "$(echo "$JSON_CONFIG" | jq -r '.network')" \
+              --cpus="$CPUS" \
+              --memory="$MEMORY" \
+              --memory-swap="$MEMORY_SWAP" \
               --restart always \
               --env-file "$ENV_FILE" \
               $DOCKER_VOLUMES \
