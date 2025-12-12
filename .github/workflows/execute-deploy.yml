@@ -167,112 +167,12 @@ jobs:
             #              HEALTHCHECK (executado no VPS)
             # =====================================================
 
-            BASE_URL="http://localhost:10000"
+            echo "🩺 Executando /home/export/healthcheck.sh"
 
-            echo "⏳ Aguardando container ficar saudável..."
-
-            # Função para esperar container subir
-            wait_for_container() {
-              local name="$1"
-              local max_retries=15
-              local attempt=1
-              
-              while [ $attempt -le $max_retries ]; do
-                if docker ps --filter "name=^${name}$" --filter "status=running" | grep -q "$name"; then
-                  echo "🟢 Container está rodando"
-                  return 0
-                fi
-                echo "⏳ ($attempt/$max_retries) Aguardando container iniciar..."
-                sleep 2
-                attempt=$((attempt+1))
-              done
-              echo "❌ Container não ficou RUNNING a tempo"
-              exit 1
-            }
-
-            wait_for_container "$APP_NAME"
-
-            # ---------------------------
-            # Função robusta de chamada HTTP com retry e timeout
-            # ---------------------------
-            request_with_retry() {
-              local method="$1"
-              local url="$2"
-              local expected_http="$3"
-              local retries=15      # Aumentei para dar mais tempo de subida
-              local attempt=1
-              local tmp_body=$(mktemp) # Arquivo temporário para o corpo
-
-              while [ $attempt -le $retries ]; do
-                echo "🔎 Tentando chamada ($attempt/$retries): $method $url"
-
-                # Captura HTTP Code e salva o corpo no arquivo tmp
-                # -s: Silent mode (sem barra de progresso)
-                # -o: Output no arquivo
-                # -w: Write out apenas o http_code no stdout
-                HTTP_CODE=$(curl -s -o "$tmp_body" -w "%{http_code}" -X "$method" "$url" || echo "000")
-
-                # Verifica se o curl falhou completamente (código 000) ou se o status não é o esperado
-                if [ "$HTTP_CODE" -eq "$expected_http" ]; then
-                  # Valida se o conteúdo é JSON válido antes de retornar
-                  if cat "$tmp_body" | jq empty 2>/dev/null; then
-                    cat "$tmp_body"
-                    rm -f "$tmp_body"
-                    return 0
-                  else
-                    echo "⚠️  HTTP $HTTP_CODE recebido, mas o JSON é inválido."
-                  fi
-                else
-                  echo "⚠️  Falha na conexão ou Status inesperado: $HTTP_CODE (Esperado: $expected_http)"
-                fi
-
-                # Se chegou aqui, falhou. Espera e tenta de novo.
-                sleep 3
-                attempt=$((attempt+1))
-              done
-
-              rm -f "$tmp_body"
-              echo "❌ Falha crítica após $retries tentativas no endpoint: $url"
-              
-              # Imprime logs do container para ajudar no debug
-              echo "📋 Logs do container (últimas 20 linhas):"
-              docker logs --tail 20 "$APP_NAME"
-              
-              exit 1
-            }
-
-            echo "📡 Testando /status..."
-            BODY=$(request_with_retry "GET" "$BASE_URL/status" 200)
-            OK=$(echo "$BODY" | jq -r '.ok')
-
-            if [ "$OK" != "false" ]; then
-              echo "❌ /status deveria retornar ok=false, recebeu ok=$OK"
-              exit 1
-            fi
-
-            echo "🟡 Selenium parado — prosseguindo para /start..."
-
-            # ---------------------------
-            # /start
-            # ---------------------------
-            S_BODY=$(request_with_retry "POST" "$BASE_URL/start" 200)
-            START_OK=$(echo "$S_BODY" | jq -r '.ok')
-
-            if [ "$START_OK" != "true" ]; then
-              echo "❌ /start deveria retornar ok=true, recebeu $START_OK"
-              exit 1
-            fi
-
-            echo "🟢 Selenium iniciado — testando /stop..."
-
-            # ---------------------------
-            # /stop
-            # ---------------------------
-            ST_BODY=$(request_with_retry "POST" "$BASE_URL/stop" 200)
-            STOP_OK=$(echo "$ST_BODY" | jq -r '.stopped')
-
-            if [ "$STOP_OK" != "true" ]; then
-              echo "❌ /stop deveria retornar stopped=true, recebeu $STOP_OK"
+            if bash /home/export/healthcheck.sh; then
+              echo "🎉 HEALTHCHECK OK — Pipeline concluído com sucesso!"
+            else
+              echo "❌ HEALTHCHECK FALHOU — Pipeline encerrado com erro!"
               exit 1
             fi
 
