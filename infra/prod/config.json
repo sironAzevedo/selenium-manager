@@ -7,9 +7,9 @@
     "./selenium-logs:/var/log/selenium"
   ],
   "configContainer": {
-    "cpus": "0.8",
-    "memory": "1G",
-    "memorySwap": "1G"
+    "cpus": "1.5",
+    "memory": "4G",
+    "memorySwap": "6G"
   },
   "environment": [
     {
@@ -18,6 +18,18 @@
     },
     {
       "name": "SE_NODE_MAX_SESSIONS",
+      "value": "1"
+    },
+    {
+      "name": "SE_NODE_SESSION_TIMEOUT",
+      "value": "120"
+    },
+    {
+      "name": "SE_NODE_BROWSER_TIMEOUT",
+      "value": "120"
+    },
+    {
+      "name": "SE_NODE_DRAIN_AFTER_SESSION_COUNT",
       "value": "1"
     }
   ]
