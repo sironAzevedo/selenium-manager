@@ -169,78 +169,98 @@ jobs:
 
             BASE_URL="http://localhost:10000"
 
-            sleep 5
+            echo "⏳ Aguardando container ficar saudável..."
+
+            # Função para esperar container subir
+            wait_for_container() {
+              local name="$1"
+              local max_retries=15
+              local attempt=1
+              
+              while [ $attempt -le $max_retries ]; do
+                if docker ps --filter "name=^${name}$" --filter "status=running" | grep -q "$name"; then
+                  echo "🟢 Container está rodando"
+                  return 0
+                fi
+                echo "⏳ ($attempt/$max_retries) Aguardando container iniciar..."
+                sleep 2
+                attempt=$((attempt+1))
+              done
+              echo "❌ Container não ficou RUNNING a tempo"
+              exit 1
+            }
+
+            wait_for_container "$APP_NAME"
+
+            # ---------------------------
+            # Função robusta de chamada HTTP com retry e timeout
+            # ---------------------------
+            request_with_retry() {
+              local method="$1"
+              local url="$2"
+              local expected_http="$3"
+              local retries=10
+              local attempt=1
+
+              while [ $attempt -le $retries ]; do
+                echo "🔎 Tentando chamada ($attempt/$retries): $method $url"
+
+                RESPONSE=$(curl -sS --max-time 4 -w "\n%{http_code}" -X "$method" "$url" || echo "")
+                BODY=$(echo "$RESPONSE" | head -n1)
+                CODE=$(echo "$RESPONSE" | tail -n1)
+
+                # Validar se retorno é JSON
+                if ! echo "$BODY" | jq empty 2>/dev/null; then
+                  echo "⚠️ Retorno inválido ou não-JSON"
+                fi
+
+                echo "➡️ HTTP: $CODE | BODY: $BODY"
+
+                if [ "$CODE" -eq "$expected_http" ]; then
+                  echo "$BODY"
+                  return 0
+                fi
+
+                sleep $((attempt + 1))
+                attempt=$((attempt+1))
+              done
+
+              echo "❌ Falha após $retries tentativas — Endpoint indisponível: $url"
+              exit 1
+            }
+
             echo "📡 Testando /status..."
+            BODY=$(request_with_retry "GET" "$BASE_URL/status" 200)
+            OK=$(echo "$BODY" | jq -r '.ok')
 
-            # ---------------------------
-            # 1️⃣ CHAMADA /status
-            # ---------------------------
-            STATUS=$(curl -s -w "\n%{http_code}" "$BASE_URL/status" || true)
-            BODY=$(echo "$STATUS" | head -n1)
-            CODE=$(echo "$STATUS" | tail -n1)
-
-            echo "STATUS CODE: $CODE"
-            echo "BODY: $BODY"
-
-            # Validar status code
-            if [ "$CODE" -ne 200 ]; then
-              echo "❌ /status falhou (HTTP $CODE)"
+            if [ "$OK" != "false" ]; then
+              echo "❌ /status deveria retornar ok=false, recebeu ok=$OK"
               exit 1
             fi
 
-            # Validar que ok == false
-            OK_VALUE=$(echo "$BODY" | jq -r '.ok')
-
-            if [ "$OK_VALUE" != "false" ]; then
-              echo "❌ Esperado ok=false no /status, mas retornou ok=$OK_VALUE"
-              exit 1
-            fi
-
-            echo "🟡 Selenium parado — prosseguindo com /start..."
+            echo "🟡 Selenium parado — prosseguindo para /start..."
 
             # ---------------------------
-            # 2️⃣ CHAMAR /start
+            # /start
             # ---------------------------
-            START=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/start")
-            S_BODY=$(echo "$START" | head -n1)
-            S_CODE=$(echo "$START" | tail -n1)
-
-            echo "START CODE: $S_CODE"
-            echo "START BODY: $S_BODY"
-
-            if [ "$S_CODE" -ne 200 ]; then
-              echo "❌ /start falhou (HTTP $S_CODE)"
-              exit 1
-            fi
-
+            S_BODY=$(request_with_retry "POST" "$BASE_URL/start" 200)
             START_OK=$(echo "$S_BODY" | jq -r '.ok')
 
             if [ "$START_OK" != "true" ]; then
-              echo "❌ Era esperado ok=true após /start, mas retornou $START_OK"
+              echo "❌ /start deveria retornar ok=true, recebeu $START_OK"
               exit 1
             fi
 
-            echo "🟢 Selenium iniciado com sucesso — prosseguindo com /stop..."
+            echo "🟢 Selenium iniciado — testando /stop..."
 
             # ---------------------------
-            # 3️⃣ CHAMAR /stop
+            # /stop
             # ---------------------------
-            STOP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/stop")
-            ST_BODY=$(echo "$STOP" | head -n1)
-            ST_CODE=$(echo "$STOP" | tail -n1)
+            ST_BODY=$(request_with_retry "POST" "$BASE_URL/stop" 200)
+            STOP_OK=$(echo "$ST_BODY" | jq -r '.stopped')
 
-            echo "STOP CODE: $ST_CODE"
-            echo "STOP BODY: $ST_BODY"
-
-            if [ "$ST_CODE" -ne 200 ]; then
-              echo "❌ /stop falhou (HTTP $ST_CODE)"
-              exit 1
-            fi
-
-            STOPPED=$(echo "$ST_BODY" | jq -r '.stopped')
-
-            if [ "$STOPPED" != "true" ]; then
-              echo "❌ Era esperado stopped=true após /stop, mas retornou $STOPPED"
+            if [ "$STOP_OK" != "true" ]; then
+              echo "❌ /stop deveria retornar stopped=true, recebeu $STOP_OK"
               exit 1
             fi
 
