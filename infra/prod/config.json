@@ -1,6 +1,6 @@
 {
   "nameAPP": "selenium-manager",
-  "port": ["4444:4444", "7900:7900", "10000:10000"],
+  "port": ["10000:10000"],
   "network": "app-network",
   "volumes": [
     "/home/exports/selenium/Downloads:/home/seluser/Downloads",
